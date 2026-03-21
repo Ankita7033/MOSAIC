@@ -1,0 +1,53 @@
+# MOSAIC — Kubernetes Benchmark Job
+# Runs all 5 schedulers and saves results to PVC
+#
+# Usage:
+#   kubectl apply -f k8s/mosaic-benchmark-job.yaml
+#   kubectl logs -f job/mosaic-benchmark -n mosaic
+#   kubectl cp mosaic/$(kubectl get pod -n mosaic -l job-name=mosaic-benchmark -o jsonpath='{.items[0].metadata.name}'):/app/results/benchmark_results.json ./benchmark_results.json
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mosaic-benchmark
+  namespace: mosaic
+  labels:
+    app.kubernetes.io/name: mosaic
+    app.kubernetes.io/component: benchmark
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: mosaic-benchmark
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: mosaic-results
+          persistentVolumeClaim:
+            claimName: mosaic-data
+      containers:
+        - name: benchmark
+          image: mosaic:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - docker-entrypoint.sh
+            - benchmark
+            - burst      # pattern
+            - "8"        # rate
+            - "120"      # duration seconds
+          volumeMounts:
+            - name: mosaic-results
+              mountPath: /app/results
+          resources:
+            requests:
+              cpu:    "500m"
+              memory: "512Mi"
+            limits:
+              cpu:    "4000m"
+              memory: "2Gi"
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"

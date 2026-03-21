@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MOSAIC -- Live Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#090e14;--bg2:#0e1620;--surf:#141f2c;--surf2:#1a2840;
+  --b:rgba(255,255,255,0.07);--b2:rgba(255,255,255,0.14);
+  --text:#ddeeff;--muted:#5a7a9a;--dim:#243040;
+  --cyan:#00d4ff;--green:#00e59a;--amber:#ffaa20;
+  --red:#ff3f5f;--purple:#a07cf0;--coral:#ff7050;
+}
+html{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;-webkit-font-smoothing:antialiased}
+body{min-height:100vh;display:grid;grid-template-rows:54px 1fr}
+header{background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-icon{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--cyan),var(--purple));display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:12px;font-weight:800;color:#000}
+.logo-text{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--cyan)}
+.logo-sub{font-size:9px;color:var(--muted);margin-top:1px}
+.hdr-right{display:flex;align-items:center;gap:14px}
+#conn-badge{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:4px 10px;border-radius:12px;border:1px solid var(--b2);transition:.3s all}
+#conn-badge.connected{color:var(--green);border-color:var(--green);background:rgba(0,229,154,.08)}
+#conn-badge.disconnected{color:var(--amber);border-color:var(--amber);background:rgba(255,170,32,.08)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+#htime{font-size:11px;color:var(--muted)}
+.btn{background:var(--surf);border:1px solid var(--b2);color:var(--text);border-radius:6px;padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;transition:.15s}
+.btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.layout{display:grid;grid-template-columns:240px 1fr;overflow:hidden}
+.sidebar{background:var(--bg2);border-right:1px solid var(--b);padding:16px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:18px}
+.sec{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+.kpi-stack{display:flex;flex-direction:column;gap:6px}
+.kpi{background:var(--surf);border:1px solid var(--b);border-radius:8px;padding:10px 12px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--ac,var(--cyan))}
+.kpi-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.kpi-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--ac,var(--cyan));line-height:1}
+.kpi-sub{font-size:9px;color:var(--dim);margin-top:2px}
+.task-list{display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto}
+.task-row{background:var(--surf);border:1px solid var(--b);border-left:3px solid var(--cls,var(--cyan));border-radius:0 6px 6px 0;padding:7px 9px}
+.task-top{display:flex;justify-content:space-between}
+.task-id{font-size:9px;color:var(--muted)}
+.task-urg{font-size:9px;font-weight:700;color:var(--amber)}
+.task-cls{font-size:10px;font-weight:500;margin:2px 0}
+.task-bar-bg{height:2px;background:var(--b2);border-radius:1px;margin-top:4px}
+.task-bar-fill{height:100%;border-radius:1px;background:var(--cls,var(--cyan));transition:width .4s}
+.elog{background:var(--bg);border:1px solid var(--b);border-radius:6px;height:150px;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.erow{display:flex;gap:8px;font-size:10px}
+.ets{color:var(--dim);min-width:44px;font-size:9px}
+.etype{font-weight:700;min-width:64px}
+.etype.ADMIT{color:var(--green)}.etype.QUEUE{color:var(--amber)}
+.etype.COMPLETE{color:var(--cyan)}.etype.THROTTLE,.etype.EXPIRE{color:var(--red)}
+.emsg{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.content{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.row{display:grid;gap:14px}
+.c2{grid-template-columns:1fr 1fr}
+.c3{grid-template-columns:1fr 1fr 1fr}
+.card{background:var(--surf);border:1px solid var(--b);border-radius:12px;padding:16px 18px}
+.card-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.card-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700}
+.card-sub{font-size:9px;color:var(--muted);margin-top:2px}
+.badge{font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:3px}
+.bg{background:rgba(0,229,154,.12);color:var(--green)}
+.ba{background:rgba(255,170,32,.12);color:var(--amber)}
+.br{background:rgba(255,63,95,.12);color:var(--red)}
+.bc{background:rgba(0,212,255,.12);color:var(--cyan)}
+canvas{max-height:170px}
+.tall canvas{max-height:220px}
+.chart-wrap{position:relative;height:170px}
+.chart-wrap.tall{height:220px}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-thumb{background:var(--dim);border-radius:2px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="logo-icon">M</div>
+    <div><div class="logo-text">MOSAIC</div><div class="logo-sub">Multi-Objective Scheduler -- Disaster-Response Edge</div></div>
+  </div>
+  <div class="hdr-right">
+    <div id="conn-badge" class="disconnected"><div class="dot"></div><span id="conn-text">Connecting to backend...</span></div>
+    <div id="htime">--:--:--</div>
+    <button class="btn" onclick="hardReset()">Reset charts</button>
+  </div>
+</header>
+<div class="layout">
+<aside class="sidebar">
+  <div>
+    <div class="sec">Live Metrics (from backend)</div>
+    <div class="kpi-stack">
+      <div class="kpi" style="--ac:var(--green)">
+        <div class="kpi-lbl">Deadline hit rate</div>
+        <div class="kpi-val" id="kHit">--</div>
+        <div class="kpi-sub" id="kHitSub">waiting...</div>
+      </div>
+      <div class="kpi" style="--ac:var(--cyan)">
+        <div class="kpi-lbl">P99 latency</div>
+        <div class="kpi-val" id="kP99">--</div>
+        <div class="kpi-sub" id="kP99Sub">P95: --</div>
+      </div>
+      <div class="kpi" style="--ac:var(--amber)">
+        <div class="kpi-lbl">Power draw</div>
+        <div class="kpi-val" id="kPow">-- W</div>
+        <div class="kpi-sub" id="kPowSub">Cap: --</div>
+      </div>
+      <div class="kpi" style="--ac:var(--purple)">
+        <div class="kpi-lbl">Jain's fairness index</div>
+        <div class="kpi-val" id="kJFI">--</div>
+        <div class="kpi-sub">1.000 = perfect</div>
+      </div>
+      <div class="kpi" style="--ac:var(--coral)">
+        <div class="kpi-lbl">Starvation rate</div>
+        <div class="kpi-val" id="kStarve">--</div>
+        <div class="kpi-sub" id="kStarveSub">--</div>
+      </div>
+      <div class="kpi" style="--ac:var(--dim)">
+        <div class="kpi-lbl">Completed tasks</div>
+        <div class="kpi-val" id="kCompleted">--</div>
+        <div class="kpi-sub" id="kAdmitted">--</div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="sec">Running tasks (live)</div>
+    <div class="task-list" id="taskList">
+      <div style="color:var(--dim);font-size:10px;padding:6px">Waiting for scheduler...</div>
+    </div>
+  </div>
+  <div>
+    <div class="sec">Event log (live)</div>
+    <div class="elog" id="elog"><div style="color:var(--dim);font-size:10px">No events yet</div></div>
+  </div>
+</aside>
+<div class="content">
+  <div class="row c2">
+    <div class="card tall">
+      <div class="card-hdr">
+        <div><div class="card-title">Deadline hit rate over time</div><div class="card-sub">From scheduler metrics -- 100% backend</div></div>
+        <span class="badge bg" id="bdgHit">WAITING</span>
+      </div>
+      <canvas id="cHit"></canvas>
+    </div>
+    <div class="card tall">
+      <div class="card-hdr">
+        <div><div class="card-title">Latency P50 / P95 / P99 over time</div><div class="card-sub">From scheduler metrics -- 100% backend</div></div>
+        <span class="badge bc">ms</span>
+      </div>
+      <canvas id="cLat"></canvas>
+    </div>
+  </div>
+  <div class="row c3">
+    <div class="card">
+      <div class="card-hdr">
+        <div><div class="card-title">Hit rate by workload class</div><div class="card-sub">From class_hit_rates -- 100% backend</div></div>
+        <span class="badge bg">%</span>
+      </div>
+      <div class="chart-wrap"><canvas id="cCls"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">
+        <div><div class="card-title">Queue depth over time</div><div class="card-sub">Running + queued -- 100% backend</div></div>
+        <span class="badge bc">tasks</span>
+      </div>
+      <div class="chart-wrap"><canvas id="cQueue"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">
+        <div><div class="card-title">Power draw over time</div><div class="card-sub">RAPL / simulated -- 100% backend</div></div>
+        <span class="badge ba" id="bdgPow">NORMAL</span>
+      </div>
+      <div class="chart-wrap"><canvas id="cPow"></canvas></div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="card">
+      <div class="card-hdr">
+        <div>
+          <div class="card-title">Interference matrix -- live from SQLite DB</div>
+          <div class="card-sub" id="matrixSub">Loading...</div>
+        </div>
+        <span class="badge br" id="bdgMatrix">LOADING</span>
+      </div>
+      <div id="matWrap" style="overflow-x:auto"></div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+const CLS_COLORS={inference_critical:'#ff4060',dispatch_api:'#00e59a',sensor_fusion:'#00d4ff',analytics_batch:'#ffa520',model_update:'#a07cf0',log_archive:'#6a8098'};
+const N=40;let CLASSES=[];
+
+const hist={hitRate:[],p50:[],p95:[],p99:[],power:[],powerCap:[],running:[],queued:[]};
+
+const GC='rgba(255,255,255,0.05)',TC='#5a7a9a',MONO="'JetBrains Mono',monospace";
+const BASE={responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{backgroundColor:'#141f2c',borderColor:'rgba(255,255,255,0.12)',borderWidth:1,titleColor:'#ddeeff',bodyColor:TC,titleFont:{family:MONO,size:10},bodyFont:{family:MONO,size:9},padding:8,cornerRadius:5}},
+  scales:{x:{grid:{color:GC},ticks:{color:TC,font:{family:MONO,size:9}},border:{display:false}},y:{grid:{color:GC},ticks:{color:TC,font:{family:MONO,size:9}},border:{display:false}}},
+  animation:{duration:200}};
+
+function mkChart(id,type,datasets,sy,leg){
+  const ctx=document.getElementById(id).getContext('2d');
+  return new Chart(ctx,{type,data:{labels:Array(N).fill(''),datasets},options:{...BASE,scales:{...BASE.scales,...(sy||{})},plugins:{...BASE.plugins,legend:leg||{display:false}}}});
+}
+
+const chHit=mkChart('cHit','line',[{label:'Hit rate',data:Array(N).fill(null),borderColor:'#00e59a',backgroundColor:'rgba(0,229,154,.08)',borderWidth:2,pointRadius:0,fill:true,tension:.4}],{y:{min:0,max:1,ticks:{callback:v=>(v*100).toFixed(0)+'%'}}});
+const chLat=mkChart('cLat','line',[{label:'P99',data:Array(N).fill(null),borderColor:'#ff3f5f',borderWidth:2,pointRadius:0,tension:.4},{label:'P95',data:Array(N).fill(null),borderColor:'#ffa520',borderWidth:1.5,pointRadius:0,tension:.4,borderDash:[3,2]},{label:'P50',data:Array(N).fill(null),borderColor:'#00d4ff',borderWidth:1.5,pointRadius:0,tension:.4}],{y:{min:0,ticks:{callback:v=>v+'ms'}}},{display:true,labels:{color:TC,font:{size:9,family:MONO},boxWidth:10}});
+const chCls=mkChart('cCls','bar',[{data:[],backgroundColor:[],borderColor:[],borderWidth:1,borderRadius:3}],{y:{min:0,max:100,ticks:{callback:v=>v+'%'}}});
+const chQueue=mkChart('cQueue','bar',[{label:'Running',data:Array(N).fill(0),backgroundColor:'rgba(0,212,255,.5)',borderColor:'#00d4ff',borderWidth:1,borderRadius:2},{label:'Queued',data:Array(N).fill(0),backgroundColor:'rgba(160,124,240,.4)',borderColor:'#a07cf0',borderWidth:1,borderRadius:2}],{x:{stacked:true},y:{stacked:true,min:0,max:12,ticks:{stepSize:2}}},{display:true,labels:{color:TC,font:{size:9,family:MONO},boxWidth:10}});
+const chPow=mkChart('cPow','line',[{label:'Watts',data:Array(N).fill(0),borderColor:'#ffa520',backgroundColor:'rgba(255,165,32,.06)',borderWidth:2,pointRadius:0,fill:true,tension:.4},{label:'Cap',data:Array(N).fill(null),borderColor:'rgba(255,63,95,.4)',borderWidth:1,pointRadius:0,borderDash:[4,3]}],{y:{min:0,max:150,ticks:{callback:v=>v+'W'}}});
+
+function push(arr,v){arr.push(v);if(arr.length>N)arr.shift();}
+function setText(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
+
+function applyAll(d){
+  if(!d)return;
+  if(d.classes&&d.classes.length)CLASSES=d.classes;
+  if(d.metrics)applyMetrics(d.metrics);
+  if(d.running!==undefined)applyRunning(d.running||[],d.queued||[]);
+  if(d.events)applyEvents(d.events);
+  if(d.matrix)applyMatrix(d.matrix,d.classes||CLASSES);
+  document.getElementById('htime').textContent=new Date().toLocaleTimeString();
+}
+
+function applyMetrics(m){
+  if(!m||!Object.keys(m).length)return;
+  const total=(m.hits||0)+(m.misses||0),hr=total>0?m.hits/total:0;
+  const p50=m.p50_ms||0,p95=m.p95_ms||0,p99=m.p99_ms||0,pw=m.power_watts||0,cap=m.power_cap||85;
+  setText('kHit',(hr*100).toFixed(1)+'%');
+  setText('kHitSub',(m.hits||0)+' hits / '+(m.misses||0)+' misses');
+  setText('kP99',Math.round(p99)+'ms');
+  setText('kP99Sub','P95: '+Math.round(p95)+'ms  P50: '+Math.round(p50)+'ms');
+  setText('kPow',pw.toFixed(1)+'W');
+  setText('kPowSub','Cap: '+cap+'W  Throttles: '+(m.throttle_events||0));
+  setText('kJFI',(m.fairness_index||0).toFixed(4));
+  const sr=total>0?((m.starvation_count||0)/total*100):0;
+  setText('kStarve',sr.toFixed(1)+'%');
+  setText('kStarveSub',(m.starvation_count||0)+' starved tasks');
+  setText('kCompleted',(m.completed||0).toString());
+  setText('kAdmitted','admitted: '+(m.admitted||0)+'  queued: '+(m.queued_total||0));
+  const bh=document.getElementById('bdgHit');
+  if(bh){if(total===0){bh.className='badge ba';bh.textContent='WAITING';}else if(hr>=.88){bh.className='badge bg';bh.textContent='HEALTHY';}else if(hr>=.70){bh.className='badge ba';bh.textContent='DEGRADED';}else{bh.className='badge br';bh.textContent='CRITICAL';}}
+  const bp=document.getElementById('bdgPow');
+  if(bp){if(pw>cap){bp.className='badge br';bp.textContent='THROTTLING';}else if(pw>cap*.9){bp.className='badge ba';bp.textContent='NEAR CAP';}else{bp.className='badge bg';bp.textContent='NORMAL';}}
+  push(hist.hitRate,hr);push(hist.p50,p50);push(hist.p95,p95);push(hist.p99,p99);
+  push(hist.power,pw);push(hist.powerCap,cap);
+  chHit.data.datasets[0].data=[...hist.hitRate];chHit.update('none');
+  chLat.data.datasets[0].data=hist.p99.map(Math.round);
+  chLat.data.datasets[1].data=hist.p95.map(Math.round);
+  chLat.data.datasets[2].data=hist.p50.map(Math.round);chLat.update('none');
+  chPow.data.datasets[0].data=[...hist.power];chPow.data.datasets[1].data=[...hist.powerCap];
+  chPow.options.scales.y.max=Math.ceil(Math.max(cap*1.2,...hist.power,10)/10)*10;chPow.update('none');
+  if(m.class_hit_rates&&Object.keys(m.class_hit_rates).length){
+    const cls=Object.keys(m.class_hit_rates);
+    chCls.data.labels=cls.map(c=>c.replace(/_/g,' '));
+    chCls.data.datasets[0].data=cls.map(c=>Math.round((m.class_hit_rates[c]||0)*100));
+    chCls.data.datasets[0].backgroundColor=cls.map(c=>(CLS_COLORS[c]||'#888')+'99');
+    chCls.data.datasets[0].borderColor=cls.map(c=>CLS_COLORS[c]||'#888');
+    chCls.update('none');
+  }
+}
+
+function applyRunning(running,queued){
+  push(hist.running,running.length);push(hist.queued,queued.length);
+  chQueue.data.datasets[0].data=[...hist.running];chQueue.data.datasets[1].data=[...hist.queued];
+  chQueue.options.scales.y.max=Math.max(12,...hist.running.map((r,i)=>r+(hist.queued[i]||0)))+2;
+  chQueue.update('none');
+  const el=document.getElementById('taskList');
+  if(!running.length){el.innerHTML='<div style="color:var(--dim);font-size:10px;padding:6px">No tasks running</div>';return;}
+  el.innerHTML=running.map(t=>{
+    const col=CLS_COLORS[t.class]||'#888',urg=(t.urgency||0).toFixed(2);
+    const rem=t.deadline_remaining_ms||0,dl=t.deadline_ms||1000;
+    const prog=Math.min(100,Math.round((1-rem/Math.max(1,dl))*100));
+    return '<div class="task-row" style="--cls:'+col+'"><div class="task-top"><span class="task-id">'+t.task_id+' T'+(t.tier||'?')+'</span><span class="task-urg">u='+urg+'</span></div><div class="task-cls">'+(t.class||'').replace(/_/g,' ')+'</div><div class="task-bar-bg"><div class="task-bar-fill" style="width:'+prog+'%;background:'+col+'"></div></div></div>';
+  }).join('');
+}
+
+function applyEvents(events){
+  if(!events||!events.length)return;
+  const el=document.getElementById('elog');
+  el.innerHTML=events.map(e=>{
+    const ts=e.ts?new Date(e.ts*1000).toLocaleTimeString():'--';
+    const ev=e.event||'?',cls=(e.class||'').replace(/_/g,' ');
+    let msg=(e.task_id||'')+(cls?' ['+cls+']':'');
+    if(e.actual_ms)msg+=' '+Math.round(e.actual_ms)+'ms '+(e.hit?'HIT':'MISS');
+    if(e.reason)msg+=' '+e.reason.split(':')[0];
+    return '<div class="erow"><span class="ets">'+ts+'</span><span class="etype '+ev+'">'+ev+'</span><span class="emsg">'+msg+'</span></div>';
+  }).join('');
+}
+
+function applyMatrix(matrix,classes){
+  if(!matrix||!classes.length)return;
+  const container=document.getElementById('matWrap');
+  const SIZE=36,LW=110;
+  let observed=0,total=0;
+  classes.forEach(ca=>classes.forEach(cb=>{const c=matrix[ca]&&matrix[ca][cb];if(c){total++;if((c.sample_count||1)>1)observed++;}}));
+  const sub=document.getElementById('matrixSub');
+  if(sub)sub.textContent=observed+'/'+total+' cells have real observed data  |  hover for details  |  updates live on task completions';
+  const bdg=document.getElementById('bdgMatrix');
+  if(bdg){bdg.className=observed>0?'badge bg':'badge ba';bdg.textContent=observed>0?'LIVE DB':'SEEDED';}
+  let html='<div style="display:inline-block;margin-top:6px">';
+  html+='<div style="display:grid;grid-template-columns:'+LW+'px '+classes.map(()=>SIZE+'px').join(' ')+';gap:2px;margin-bottom:2px">';
+  html+='<div style="font-size:8px;color:var(--muted);display:flex;align-items:flex-end;justify-content:flex-end;padding-right:6px;padding-bottom:4px">aggressor</div>';
+  classes.forEach(c=>{html+='<div style="font-size:7px;color:var(--muted);text-align:center;transform:rotate(-35deg);transform-origin:50% 80%;height:50px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px;white-space:nowrap">'+c.replace(/_/g,'<br>')+'</div>';});
+  html+='</div>';
+  classes.forEach(ca=>{
+    html+='<div style="display:grid;grid-template-columns:'+LW+'px '+classes.map(()=>SIZE+'px').join(' ')+';gap:2px;margin-bottom:2px">';
+    html+='<div style="font-size:9px;color:var(--muted);display:flex;align-items:center;justify-content:flex-end;padding-right:6px">'+ca.replace(/_/g,' ')+'</div>';
+    classes.forEach(cb=>{
+      const cell=(matrix[ca]&&matrix[ca][cb])||{ipc_degradation:0,lat_overhead_ms:0,confidence:0.5,sample_count:1,live:false};
+      const v=cell.ipc_degradation,lat=cell.lat_overhead_ms,conf=cell.confidence||0.5,n=cell.sample_count||1,live=cell.live!==false;
+      const pct=Math.round(v*100);
+      let bg,fc;
+      if(v===0){bg='rgba(255,255,255,0.04)';fc='#2e4055';}
+      else if(v<.10){bg='rgba(0,229,154,'+(0.15+v*2)+')';fc='#00e59a';}
+      else if(v<.20){bg='rgba(255,165,32,'+(0.15+v*2)+')';fc='#ffa520';}
+      else if(v<.30){bg='rgba(255,122,92,'+(0.2+v)+')';fc='#ff7a5c';}
+      else{bg='rgba(255,63,95,'+(0.25+v)+')';fc='#ff3f5f';}
+      const opacity=0.45+conf*0.55;
+      const border=v>=0.35?'2px solid #ff3f5f':'1px solid rgba(255,255,255,0.06)';
+      const tip=ca.replace(/_/g,' ')+'->'+cb.replace(/_/g,' ')+': IPC='+pct+'% lat=+'+lat+'ms conf='+(conf*100).toFixed(0)+'% n='+n+(live?' (live DB)':' (seeded)')+(v>=0.35?' NEVER COLOCATED':'');
+      html+='<div title="'+tip+'" style="width:'+SIZE+'px;height:'+SIZE+'px;background:'+bg+';color:'+fc+';border:'+border+';border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:'+(v===0?'10':'8')+'px;font-weight:700;opacity:'+opacity+';cursor:default;transition:transform .15s,opacity .2s" onmouseenter="this.style.transform=\'scale(1.2)\';this.style.opacity=\'1\'" onmouseleave="this.style.transform=\'scale(1)\';this.style.opacity=\''+opacity+'\'">'+(v===0?'.':pct)+'</div>';
+    });
+    html+='</div>';
+  });
+  html+='<div style="display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;font-size:8px;color:var(--muted)">';
+  [['No effect','rgba(255,255,255,0.04)'],['Low <10%','rgba(0,229,154,.5)'],['Medium 10-20%','rgba(255,165,32,.5)'],['High 20-30%','rgba(255,122,92,.5)'],['Critical >30% never colocated','rgba(255,63,95,.6)']].forEach(function(p){html+='<span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:2px;background:'+p[1]+';display:inline-block"></span>'+p[0]+'</span>';});
+  html+='</div><div style="margin-top:5px;font-size:9px;color:var(--dim)">Opacity = confidence. Dim = seeded default. Bright = observed from real completions. Updates live.</div></div>';
+  container.innerHTML=html;
+}
+
+function loadStaticMatrix() {
+  // Hardcoded fallback shown when server not reachable
+  // Identical to what SQLite contains by default
+  const STATIC = {
+    inference_critical:{inference_critical:{ipc_degradation:0,lat_overhead_ms:0,confidence:1,sample_count:1,live:false},dispatch_api:{ipc_degradation:0.38,lat_overhead_ms:22,confidence:0.5,sample_count:1,live:false},sensor_fusion:{ipc_degradation:0.25,lat_overhead_ms:14,confidence:0.5,sample_count:1,live:false},analytics_batch:{ipc_degradation:0.12,lat_overhead_ms:6,confidence:0.5,sample_count:1,live:false},model_update:{ipc_degradation:0.08,lat_overhead_ms:3,confidence:0.5,sample_count:1,live:false},log_archive:{ipc_degradation:0.04,lat_overhead_ms:1,confidence:0.5,sample_count:1,live:false}},
+    dispatch_api:{inference_critical:{ipc_degradation:0.05,lat_overhead_ms:2,confidence:0.5,sample_count:1,live:false},dispatch_api:{ipc_degradation:0,lat_overhead_ms:0,confidence:1,sample_count:1,live:false},sensor_fusion:{ipc_degradation:0.1,lat_overhead_ms:4,confidence:0.5,sample_count:1,live:false},analytics_batch:{ipc_degradation:0.06,lat_overhead_ms:2,confidence:0.5,sample_count:1,live:false},model_update:{ipc_degradation:0.04,lat_overhead_ms:1.5,confidence:0.5,sample_count:1,live:false},log_archive:{ipc_degradation:0.02,lat_overhead_ms:0.5,confidence:0.5,sample_count:1,live:false}},
+    sensor_fusion:{inference_critical:{ipc_degradation:0.18,lat_overhead_ms:9,confidence:0.5,sample_count:1,live:false},dispatch_api:{ipc_degradation:0.14,lat_overhead_ms:6,confidence:0.5,sample_count:1,live:false},sensor_fusion:{ipc_degradation:0,lat_overhead_ms:0,confidence:1,sample_count:1,live:false},analytics_batch:{ipc_degradation:0.1,lat_overhead_ms:4,confidence:0.5,sample_count:1,live:false},model_update:{ipc_degradation:0.12,lat_overhead_ms:5,confidence:0.5,sample_count:1,live:false},log_archive:{ipc_degradation:0.03,lat_overhead_ms:1,confidence:0.5,sample_count:1,live:false}},
+    analytics_batch:{inference_critical:{ipc_degradation:0.2,lat_overhead_ms:11,confidence:0.5,sample_count:1,live:false},dispatch_api:{ipc_degradation:0.16,lat_overhead_ms:7,confidence:0.5,sample_count:1,live:false},sensor_fusion:{ipc_degradation:0.14,lat_overhead_ms:6,confidence:0.5,sample_count:1,live:false},analytics_batch:{ipc_degradation:0,lat_overhead_ms:0,confidence:1,sample_count:1,live:false},model_update:{ipc_degradation:0.18,lat_overhead_ms:8,confidence:0.5,sample_count:1,live:false},log_archive:{ipc_degradation:0.05,lat_overhead_ms:1.5,confidence:0.5,sample_count:1,live:false}},
+    model_update:{inference_critical:{ipc_degradation:0.22,lat_overhead_ms:12,confidence:0.5,sample_count:1,live:false},dispatch_api:{ipc_degradation:0.18,lat_overhead_ms:9,confidence:0.5,sample_count:1,live:false},sensor_fusion:{ipc_degradation:0.16,lat_overhead_ms:7,confidence:0.5,sample_count:1,live:false},analytics_batch:{ipc_degradation:0.14,lat_overhead_ms:6,confidence:0.5,sample_count:1,live:false},model_update:{ipc_degradation:0,lat_overhead_ms:0,confidence:1,sample_count:1,live:false},log_archive:{ipc_degradation:0.06,lat_overhead_ms:2,confidence:0.5,sample_count:1,live:false}},
+    log_archive:{inference_critical:{ipc_degradation:0.03,lat_overhead_ms:1,confidence:0.5,sample_count:1,live:false},dispatch_api:{ipc_degradation:0.02,lat_overhead_ms:0.5,confidence:0.5,sample_count:1,live:false},sensor_fusion:{ipc_degradation:0.02,lat_overhead_ms:0.5,confidence:0.5,sample_count:1,live:false},analytics_batch:{ipc_degradation:0.03,lat_overhead_ms:1,confidence:0.5,sample_count:1,live:false},model_update:{ipc_degradation:0.02,lat_overhead_ms:0.5,confidence:0.5,sample_count:1,live:false},log_archive:{ipc_degradation:0,lat_overhead_ms:0,confidence:1,sample_count:1,live:false}}
+  };
+  const classes = ['inference_critical','dispatch_api','sensor_fusion','analytics_batch','model_update','log_archive'];
+  CLASSES = classes;
+  applyMatrix(STATIC, classes);
+}
+
+function hardReset(){Object.keys(hist).forEach(k=>{hist[k]=[];});[chHit,chLat,chPow,chQueue].forEach(c=>{c.data.datasets.forEach(d=>{d.data=Array(N).fill(null);});c.update('none');});}
+
+let es=null;
+function connect(){
+  if(es){try{es.close();}catch(e){}}
+  const badge=document.getElementById('conn-badge'),txt=document.getElementById('conn-text');
+  badge.className='disconnected';txt.textContent='Connecting...';
+  es=new EventSource('/stream');
+  es.onopen=()=>{badge.className='connected';txt.textContent='Live -- all data from backend';};
+  es.onmessage=(e)=>{try{applyAll(JSON.parse(e.data));}catch(err){console.error(err);}};
+  es.onerror=()=>{badge.className='disconnected';txt.textContent='Reconnecting in 3s...';es.close();setTimeout(connect,3000);};
+}
+// Immediately load interference matrix (available even without scheduler running)
+fetch('/interference')
+  .then(r => r.json())
+  .then(data => {
+    if (data.matrix && data.classes) {
+      applyMatrix(data.matrix, data.classes);
+      CLASSES = data.classes;
+    }
+  })
+  .catch(() => {
+    // Server not running - show static fallback matrix
+    loadStaticMatrix();
+  });
+
+connect();
+// Immediately fetch current state so dashboard populates on load
+fetch('/status').then(r=>r.json()).then(d=>{
+  if(d.metrics) applyMetrics(d.metrics);
+  if(d.running) applyRunning(d.running||[], d.queued||[]);
+}).catch(()=>{});
+fetch('/interference').then(r=>r.json()).then(d=>{
+  if(d.matrix&&d.classes) { applyMatrix(d.matrix,d.classes); CLASSES=d.classes; }
+}).catch(()=>{ loadStaticMatrix(); });
+setInterval(()=>{document.getElementById('htime').textContent=new Date().toLocaleTimeString();},1000);
+</script>
+</body>
+</html>

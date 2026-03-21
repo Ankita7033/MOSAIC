@@ -1,0 +1,5 @@
+2026-03-21 21:05:58,092 [WARNING] [rapl] Windows -- power simulated
+2026-03-21 21:05:58,092 [INFO] [cgroup] Windows -- simulated
+2026-03-21 21:05:58,092 [INFO] [mosaic] Ready  power_cap=85.0W  platform=win32
+2026-03-21 21:05:58,093 [INFO] [mosaic] Background threads started
+2026-03-21 21:05:58,095 [INFO] [server] TCP socket: 127.0.0.1:47777

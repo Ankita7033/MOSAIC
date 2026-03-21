@@ -1,0 +1,214 @@
+# ============================================================
+#  MOSAIC — Kubernetes Deployment
+#  Deploys the scheduler daemon + live dashboard as a
+#  DaemonSet (one pod per edge node) with:
+#    - ConfigMap for tuning parameters
+#    - PersistentVolumeClaim for metrics storage
+#    - Service for dashboard access
+#    - RBAC for pod metrics collection
+#
+#  Apply:
+#    kubectl apply -f k8s/mosaic-deployment.yaml
+#
+#  Access dashboard:
+#    kubectl port-forward svc/mosaic-dashboard 7777:7777
+#    open http://localhost:7777
+#
+#  Run benchmark job:
+#    kubectl apply -f k8s/mosaic-benchmark-job.yaml
+#
+#  Watch scheduler logs:
+#    kubectl logs -f daemonset/mosaic-scheduler
+# ============================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mosaic
+  labels:
+    app.kubernetes.io/name: mosaic
+    app.kubernetes.io/component: scheduler
+
+---
+# ── ConfigMap: tunable parameters ─────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosaic-config
+  namespace: mosaic
+  labels:
+    app.kubernetes.io/name: mosaic
+data:
+  MOSAIC_POWER_CAP:  "85"
+  MOSAIC_LOG_LEVEL:  "INFO"
+  # Workload patterns for the generator
+  WORKLOAD_PATTERN:  "disaster"
+  WORKLOAD_RATE:     "6"
+  WORKLOAD_DURATION: "300"
+
+---
+# ── PersistentVolumeClaim: metrics + fingerprint DB ───────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mosaic-data
+  namespace: mosaic
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard
+
+---
+# ── DaemonSet: one scheduler per edge node ────────────────────
+# Use DaemonSet so each physical node gets its own MOSAIC instance.
+# This is the correct topology for disaster-response edge deployments
+# where each node is a standalone edge server.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: mosaic-scheduler
+  namespace: mosaic
+  labels:
+    app.kubernetes.io/name: mosaic
+    app.kubernetes.io/component: scheduler
+  annotations:
+    description: "MOSAIC interference-aware edge scheduler"
+spec:
+  selector:
+    matchLabels:
+      app: mosaic-scheduler
+  template:
+    metadata:
+      labels:
+        app: mosaic-scheduler
+        app.kubernetes.io/name: mosaic
+        version: "1.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "7777"
+        prometheus.io/path:   "/status"
+    spec:
+      # Privileged required for cgroups v2 + perf_event_open
+      securityContext:
+        runAsNonRoot: false
+
+      terminationGracePeriodSeconds: 30
+
+      volumes:
+        - name: mosaic-data
+          persistentVolumeClaim:
+            claimName: mosaic-data
+        - name: cgroup-fs
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
+        - name: rapl-fs
+          hostPath:
+            path: /sys/class/powercap
+            type: DirectoryOrCreate
+
+      containers:
+        - name: mosaic
+          image: mosaic:latest
+          imagePullPolicy: IfNotPresent
+          command: ["docker-entrypoint.sh", "scheduler"]
+
+          ports:
+            - name: dashboard
+              containerPort: 7777
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: mosaic-config
+
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+
+          resources:
+            requests:
+              cpu:    "200m"
+              memory: "256Mi"
+            limits:
+              cpu:    "2000m"
+              memory: "1Gi"
+
+          volumeMounts:
+            - name: mosaic-data
+              mountPath: /app/data
+            - name: cgroup-fs
+              mountPath: /sys/fs/cgroup
+            - name: rapl-fs
+              mountPath: /sys/class/powercap
+
+          securityContext:
+            privileged: true           # needed for cgroups + perf_event
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - PERFMON              # Linux 5.8+ fine-grained perf cap
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 7777
+            initialDelaySeconds: 15
+            periodSeconds:       10
+            failureThreshold:    3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 7777
+            initialDelaySeconds: 8
+            periodSeconds:       5
+
+---
+# ── Service: expose dashboard ─────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosaic-dashboard
+  namespace: mosaic
+  labels:
+    app.kubernetes.io/name: mosaic
+    app.kubernetes.io/component: dashboard
+spec:
+  selector:
+    app: mosaic-scheduler
+  ports:
+    - name: dashboard
+      port:       7777
+      targetPort: 7777
+      protocol:   TCP
+  type: ClusterIP
+
+---
+# ── ServiceMonitor: Prometheus scraping (if prometheus-operator installed) ───
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mosaic-metrics
+  namespace: mosaic
+  labels:
+    app.kubernetes.io/name: mosaic
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mosaic
+  endpoints:
+    - port: dashboard
+      path: /status
+      interval: 15s
+      scrapeTimeout: 5s

@@ -1,0 +1,9 @@
+{
+  "name": "quick_sanity",
+  "description": "Fast 20s run for CI and quick validation",
+  "pattern": "poisson",
+  "rate": 3.0,
+  "duration": 20,
+  "seed": 42,
+  "schedulers": ["fcfs", "rr", "sjf", "priority", "mosaic"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "disaster_scenario",
+  "description": "Realistic disaster: calm → onset → crisis → recovery",
+  "pattern": "disaster",
+  "rate": 6.0,
+  "duration": 180,
+  "seed": 42,
+  "schedulers": ["fcfs", "rr", "sjf", "priority", "mosaic"]
+}

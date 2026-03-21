@@ -1,0 +1,14 @@
+data/mosaic.sock
+data/mosaic.log
+data/daemon.log
+data/*.pid
+data/centroids.json
+data/metrics.jsonl
+!data/.gitkeep
+results/*.png
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+profiler/profiler

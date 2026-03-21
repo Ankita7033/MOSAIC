@@ -1,0 +1,130 @@
+{
+  "config": {
+    "pattern": "burst",
+    "rate": 6.0,
+    "duration": 60.0
+  },
+  "results": [
+    {
+      "scheduler": "FCFS",
+      "total": 63,
+      "hits": 61,
+      "misses": 2,
+      "hit_rate": 0.9683,
+      "starvation_rate": 0.0635,
+      "throughput_tps": 1.03,
+      "energy_wh": 0.0998,
+      "efficiency_tpwh": 631.4,
+      "p50_ms": 145.2,
+      "p95_ms": 3423.0,
+      "p99_ms": 12738.5,
+      "fairness_index": 0.9994,
+      "class_hit_rates": {
+        "inference_critical": 0.957,
+        "dispatch_api": 0.941,
+        "sensor_fusion": 1.0,
+        "analytics_batch": 1.0,
+        "model_update": 1.0,
+        "log_archive": 1.0
+      },
+      "elapsed_s": 61.3
+    },
+    {
+      "scheduler": "RoundRobin",
+      "total": 63,
+      "hits": 61,
+      "misses": 2,
+      "hit_rate": 0.9683,
+      "starvation_rate": 0.0635,
+      "throughput_tps": 1.03,
+      "energy_wh": 0.1039,
+      "efficiency_tpwh": 606.5,
+      "p50_ms": 152.3,
+      "p95_ms": 3560.4,
+      "p99_ms": 13247.8,
+      "fairness_index": 0.9994,
+      "class_hit_rates": {
+        "inference_critical": 0.957,
+        "dispatch_api": 0.941,
+        "sensor_fusion": 1.0,
+        "analytics_batch": 1.0,
+        "model_update": 1.0,
+        "log_archive": 1.0
+      },
+      "elapsed_s": 61.3
+    },
+    {
+      "scheduler": "SJF",
+      "total": 63,
+      "hits": 61,
+      "misses": 2,
+      "hit_rate": 0.9683,
+      "starvation_rate": 0.0635,
+      "throughput_tps": 1.05,
+      "energy_wh": 0.0998,
+      "efficiency_tpwh": 631.3,
+      "p50_ms": 145.2,
+      "p95_ms": 3423.0,
+      "p99_ms": 12738.5,
+      "fairness_index": 0.9994,
+      "class_hit_rates": {
+        "inference_critical": 0.957,
+        "dispatch_api": 0.941,
+        "sensor_fusion": 1.0,
+        "analytics_batch": 1.0,
+        "model_update": 1.0,
+        "log_archive": 1.0
+      },
+      "elapsed_s": 60.0
+    },
+    {
+      "scheduler": "PriorityStatic",
+      "total": 63,
+      "hits": 61,
+      "misses": 2,
+      "hit_rate": 0.9683,
+      "starvation_rate": 0.0476,
+      "throughput_tps": 1.03,
+      "energy_wh": 0.0998,
+      "efficiency_tpwh": 631.3,
+      "p50_ms": 145.2,
+      "p95_ms": 3423.0,
+      "p99_ms": 12738.5,
+      "fairness_index": 0.9994,
+      "class_hit_rates": {
+        "inference_critical": 0.957,
+        "dispatch_api": 0.941,
+        "sensor_fusion": 1.0,
+        "analytics_batch": 1.0,
+        "model_update": 1.0,
+        "log_archive": 1.0
+      },
+      "elapsed_s": 61.2
+    },
+    {
+      "scheduler": "MOSAIC",
+      "total": 74,
+      "hits": 71,
+      "misses": 3,
+      "hit_rate": 0.9595,
+      "starvation_rate": 0.0,
+      "throughput_tps": 1.23,
+      "energy_wh": 0.0632,
+      "efficiency_tpwh": 1170.6,
+      "p50_ms": 407.2,
+      "p95_ms": 1174.1,
+      "p99_ms": 3177.8,
+      "fairness_index": 0.9995,
+      "class_hit_rates": {
+        "inference_critical": 0.942,
+        "dispatch_api": 1.0,
+        "sensor_fusion": 1.0,
+        "analytics_batch": 1.0,
+        "model_update": 1.0,
+        "log_archive": 0.0
+      },
+      "elapsed_s": 60.2
+    }
+  ],
+  "generated_at": "2026-03-21T14:46:57Z"
+}

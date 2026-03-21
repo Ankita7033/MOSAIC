@@ -1,0 +1,9 @@
+{
+  "name": "burst_stress",
+  "description": "High-rate burst pattern — simulates mass-casualty event surge",
+  "pattern": "burst",
+  "rate": 8.0,
+  "duration": 120,
+  "seed": 42,
+  "schedulers": ["fcfs", "rr", "sjf", "priority", "mosaic"]
+}
