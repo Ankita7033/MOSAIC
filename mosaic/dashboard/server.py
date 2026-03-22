@@ -515,7 +515,8 @@ def main():
     print(f"\n  MOSAIC Live Dashboard")
     print(f"  {'='*42}")
     print(f"  URL        : http://localhost:{args.port}")
-    print(f"  Scheduler  : {'CONNECTED' if is_alive else 'not running (start with: .\\mosaic.bat start)'}")
+    sched_status = 'CONNECTED' if is_alive else 'not running (run: mosaic start)'
+    print(f"  Scheduler  : {sched_status}")
     print(f"  Stream     : http://localhost:{args.port}/stream  (SSE - all live data)")
     print(f"  Matrix     : http://localhost:{args.port}/interference  (JSON)")
     print(f"  Status     : http://localhost:{args.port}/status  (JSON)")
