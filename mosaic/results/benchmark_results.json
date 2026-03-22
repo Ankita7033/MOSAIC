@@ -12,7 +12,7 @@
       "misses": 2,
       "hit_rate": 0.9683,
       "starvation_rate": 0.0635,
-      "throughput_tps": 1.03,
+      "throughput_tps": 1.05,
       "energy_wh": 0.0998,
       "efficiency_tpwh": 631.4,
       "p50_ms": 145.2,
@@ -27,7 +27,7 @@
         "model_update": 1.0,
         "log_archive": 1.0
       },
-      "elapsed_s": 61.3
+      "elapsed_s": 60.2
     },
     {
       "scheduler": "RoundRobin",
@@ -36,9 +36,9 @@
       "misses": 2,
       "hit_rate": 0.9683,
       "starvation_rate": 0.0635,
-      "throughput_tps": 1.03,
-      "energy_wh": 0.1039,
-      "efficiency_tpwh": 606.5,
+      "throughput_tps": 1.05,
+      "energy_wh": 0.1038,
+      "efficiency_tpwh": 606.7,
       "p50_ms": 152.3,
       "p95_ms": 3560.4,
       "p99_ms": 13247.8,
@@ -51,7 +51,7 @@
         "model_update": 1.0,
         "log_archive": 1.0
       },
-      "elapsed_s": 61.3
+      "elapsed_s": 60.2
     },
     {
       "scheduler": "SJF",
@@ -62,7 +62,7 @@
       "starvation_rate": 0.0635,
       "throughput_tps": 1.05,
       "energy_wh": 0.0998,
-      "efficiency_tpwh": 631.3,
+      "efficiency_tpwh": 631.4,
       "p50_ms": 145.2,
       "p95_ms": 3423.0,
       "p99_ms": 12738.5,
@@ -75,7 +75,7 @@
         "model_update": 1.0,
         "log_archive": 1.0
       },
-      "elapsed_s": 60.0
+      "elapsed_s": 60.3
     },
     {
       "scheduler": "PriorityStatic",
@@ -84,9 +84,9 @@
       "misses": 2,
       "hit_rate": 0.9683,
       "starvation_rate": 0.0476,
-      "throughput_tps": 1.03,
+      "throughput_tps": 1.05,
       "energy_wh": 0.0998,
-      "efficiency_tpwh": 631.3,
+      "efficiency_tpwh": 631.4,
       "p50_ms": 145.2,
       "p95_ms": 3423.0,
       "p99_ms": 12738.5,
@@ -99,7 +99,7 @@
         "model_update": 1.0,
         "log_archive": 1.0
       },
-      "elapsed_s": 61.2
+      "elapsed_s": 60.3
     },
     {
       "scheduler": "MOSAIC",
@@ -123,8 +123,8 @@
         "model_update": 1.0,
         "log_archive": 0.0
       },
-      "elapsed_s": 60.2
+      "elapsed_s": 60.1
     }
   ],
-  "generated_at": "2026-03-21T14:46:57Z"
+  "generated_at": "2026-03-22T16:18:30Z"
 }
