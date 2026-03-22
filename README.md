@@ -275,6 +275,10 @@ python3 tests/test_all.py
 
 ---
 
+## To run in docker 
+docker start mosaic-scheduler
+docker exec mosaic-scheduler python workload-gen/workload_gen.py --pattern disaster --rate 4 --duration 600 --scheduler --quiet
+
 ## License
 
 MIT -- see [LICENSE](LICENSE).
