@@ -1,57 +1,51 @@
-# MOSAIC — Docker Compose Stack
-# ============================================================
+# MOSAIC - Docker Compose Stack
 #
 # Quick start:
 #   docker-compose up -d
-#   open http://localhost:7777
+#   open http://localhost:8888
+#
+# Send live workload (makes dashboard charts move):
+#   docker exec mosaic-scheduler python workload-gen/workload_gen.py --pattern disaster --rate 4 --duration 600 --scheduler --quiet
 #
 # Run benchmark:
-#   docker-compose run --rm benchmark
+#   docker exec mosaic-scheduler python run_experiment.py --compare all --no-charts
 #
 # View logs:
-#   docker-compose logs -f scheduler
+#   docker logs mosaic-scheduler
 #
 # Stop:
 #   docker-compose down
-# ============================================================
-
-version: '3.9'
 
 services:
 
-  # ── Core scheduler daemon ─────────────────────────────────
   scheduler:
     build: .
     container_name: mosaic-scheduler
     command: scheduler
-    privileged: true            # needed for cgroups v2 + perf_event
+    privileged: true
     volumes:
-      - mosaic-data:/app/data   # persist fingerprint DB, metrics, logs
+      - mosaic-data:/app/data
       - mosaic-results:/app/results
     ports:
-      - "7777:7777"             # dashboard + API
+      - "8888:7777"
     environment:
       - MOSAIC_POWER_CAP=85
       - MOSAIC_LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:7777/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7777/health', timeout=3)"]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 20s
     networks:
       - mosaic-net
-    labels:
-      - "com.mosaic.role=scheduler"
-      - "com.mosaic.description=Core scheduling daemon + live dashboard"
 
-  # ── Workload generator (runs once, then exits) ────────────
   workload:
     build: .
     container_name: mosaic-workload
-    command: workload disaster 6 120
+    command: workload disaster 4 120
     depends_on:
       scheduler:
         condition: service_healthy
@@ -61,38 +55,26 @@ services:
       - PYTHONUNBUFFERED=1
     networks:
       - mosaic-net
-    labels:
-      - "com.mosaic.role=workload-generator"
     profiles:
-      - workload               # only starts with: docker-compose --profile workload up
+      - workload
 
-  # ── Benchmark runner (runs once, then exits) ──────────────
   benchmark:
     build: .
     container_name: mosaic-benchmark
-    command: benchmark burst 8 90
+    command: benchmark burst 6 60
     volumes:
       - mosaic-results:/app/results
     environment:
       - PYTHONUNBUFFERED=1
     networks:
       - mosaic-net
-    labels:
-      - "com.mosaic.role=benchmark"
     profiles:
-      - benchmark              # only starts with: docker-compose --profile benchmark up
+      - benchmark
 
 volumes:
   mosaic-data:
-    name: mosaic-data
-    labels:
-      - "com.mosaic.volume=runtime-data"
   mosaic-results:
-    name: mosaic-results
-    labels:
-      - "com.mosaic.volume=benchmark-results"
 
 networks:
   mosaic-net:
-    name: mosaic-network
     driver: bridge
