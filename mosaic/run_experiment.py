@@ -96,35 +96,37 @@ def run_classify(ipc, llc, bw, br):
 # -- Full benchmark pipeline ----------------------------------------------------
 
 def run_compare_all(pattern: str, rate: float, duration: float,
-                    quick: bool, no_charts: bool) -> dict:
+                    quick: bool, no_charts: bool, seed: int = 42) -> dict:
     from benchmark import run_all, print_comparison_table, SCHEDULER_REGISTRY
 
     if quick:
         duration = 20.0
         rate     = 4.0
 
-    log_step(f"Running all 5 schedulers  pattern={pattern}  rate={rate}/s  dur={duration}s")
-    log_info("Schedulers: FCFS | Round Robin | SJF | Priority | MOSAIC")
+    log_step(f"Running all 6 schedulers  pattern={pattern}  rate={rate}/s  dur={duration}s  seed={seed}")
+    log_info("Schedulers: FCFS | Round Robin | SJF | PriorityStrict | EDF | MOSAIC")
+    log_info("Mode: DETERMINISTIC TRACE REPLAY (all schedulers get identical workload)")
     log_info("Metrics: hit_rate | p99 | JFI | starvation | throughput | energy")
     print()
 
     t0      = time.monotonic()
     results = run_all(duration, rate, pattern,
-                      ["fcfs","rr","sjf","priority","mosaic"])
+                      ["fcfs","rr","sjf","priority","edf","mosaic"], seed)
     elapsed = time.monotonic() - t0
 
     print_comparison_table(results)
 
     # Save
     out = {
-        "config": {"pattern": pattern, "rate": rate, "duration": duration},
+        "config": {"pattern": pattern, "rate": rate, "duration": duration,
+                   "seed": seed, "replay_mode": "deterministic"},
         "results": results,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     results_path = _ROOT / "results" / "benchmark_results.json"
     results_path.parent.mkdir(parents=True, exist_ok=True)
     results_path.write_text(json.dumps(out, indent=2))
-    log_ok(f"Results saved → {results_path}")
+    log_ok(f"Results saved -> {results_path}")
 
     # Charts
     if not no_charts:
@@ -144,6 +146,68 @@ def run_compare_all(pattern: str, rate: float, duration: float,
 
     return out
 
+def run_multi_seed(pattern: str, rate: float, duration: float,
+                   schedulers: list[str], seeds: list[int]) -> dict:
+    from benchmark import run_all, print_comparison_table
+    import math
+
+    log_step(f"Running Multi-Seed Experiment: {len(seeds)} seeds {seeds}")
+    log_info(f"Pattern={pattern}  Rate={rate}/s  Duration={duration}s")
+    
+    all_runs = []
+    for seed in seeds:
+        log_step(f"--- SEED {seed} ---")
+        results = run_all(duration, rate, pattern, schedulers, seed)
+        all_runs.append(results)
+
+    log_step("Aggregating Multi-Seed Results (Mean ± 95% CI)")
+    
+    # Aggregate
+    agg = {}
+    for s_name in schedulers:
+        # Find results for this scheduler across all runs
+        # Handle cases where scheduler names map to their display names
+        s_res = []
+        for run in all_runs:
+            for r in run:
+                if r["scheduler"].lower().replace(" ", "").replace("-", "") == s_name.replace("_", "") or \
+                   r["scheduler"].lower() == s_name or \
+                   (s_name == "priority" and "Priority" in r["scheduler"]):
+                    s_res.append(r)
+        
+        if not s_res: continue
+        
+        n = len(s_res)
+        metrics = ["hit_rate", "p99_ms", "fairness_index", "throughput_tps", "starvation_rate"]
+        s_agg = {"scheduler": s_res[0]["scheduler"]}
+        
+        for m in metrics:
+            vals = [r[m] for r in s_res]
+            mean = sum(vals) / n
+            std = math.sqrt(sum((x - mean)**2 for x in vals) / max(1, n-1))
+            ci95 = 1.96 * (std / math.sqrt(n))
+            s_agg[f"{m}_mean"] = mean
+            s_agg[f"{m}_std"] = std
+            s_agg[f"{m}_ci95"] = ci95
+            
+        agg[s_name] = s_agg
+        
+        # Print
+        print(f"  {s_agg['scheduler']:<20}: "
+              f"Hit%={s_agg['hit_rate_mean']*100:>5.1f}±{s_agg['hit_rate_ci95']*100:<4.1f}  "
+              f"P99={s_agg['p99_ms_mean']:>5.0f}±{s_agg['p99_ms_ci95']:<4.0f}  "
+              f"JFI={s_agg['fairness_index_mean']:>5.3f}±{s_agg['fairness_index_ci95']:<5.3f}")
+
+    return {"config": {"pattern": pattern, "seeds": seeds}, "aggregated": agg, "raw_runs": all_runs}
+
+
+def run_ablation(pattern: str, rate: float, duration: float, seed: int):
+    log_step("Running MOSAIC Ablation Study")
+    schedulers = ["fcfs", "priority", "mosaic_nopmu", "mosaic_noadm", "mosaic"]
+    from benchmark import run_all, print_comparison_table
+    results = run_all(duration, rate, pattern, schedulers, seed)
+    print_comparison_table(results)
+
 
 # -- Live scheduler demo --------------------------------------------------------
 
@@ -153,8 +217,11 @@ def run_live_demo(pattern: str, rate: float, duration: float) -> None:
 
     # Kill any existing daemon
     sock_path = _ROOT / "data" / "mosaic.sock"
+    port_path = _ROOT / "data" / "mosaic.port"
     if sock_path.exists():
         sock_path.unlink()
+    if port_path.exists():
+        port_path.unlink()
 
     daemon_log = _ROOT / "data" / "daemon.log"
     (_ROOT / "data").mkdir(exist_ok=True)
@@ -163,13 +230,13 @@ def run_live_demo(pattern: str, rate: float, duration: float) -> None:
         stdout=open(daemon_log, "w"), stderr=subprocess.STDOUT,
     )
 
-    # Wait for socket
+    # Wait for port file (or socket)
     for _ in range(30):
-        if sock_path.exists():
+        if port_path.exists() or sock_path.exists():
             break
         time.sleep(0.3)
 
-    if not sock_path.exists():
+    if not (port_path.exists() or sock_path.exists()):
         log_err(f"Daemon failed to start. See {daemon_log}")
         return
 
@@ -238,11 +305,17 @@ Examples:
         """,
     )
     parser.add_argument("--compare",    nargs="+", metavar="SCHED",
-                        help="Run comparison: 'all' or subset of fcfs rr sjf priority mosaic")
+                        help="Run comparison: 'all' or subset of fcfs rr sjf priority edf mosaic")
     parser.add_argument("--pattern",    default="burst",
-                        choices=["poisson","burst","sinusoidal","disaster","step"])
+                        choices=["poisson","burst","sinusoidal","disaster", "cache_thrash", "retry_storm", "overload", "misclassify"])
     parser.add_argument("--rate",       type=float, default=6.0)
     parser.add_argument("--duration",   type=float, default=60.0)
+    parser.add_argument("--seed",       type=int, default=42,
+                        help="RNG seed for deterministic trace replay")
+    parser.add_argument("--seeds",      type=int, nargs="+",
+                        help="Multiple seeds for rigorous evaluation (e.g. 42 43 44)")
+    parser.add_argument("--ablation",   action="store_true",
+                        help="Run MOSAIC ablation study (Full vs No-PMU vs No-Admission)")
     parser.add_argument("--quick",      action="store_true",
                         help="Short run: 20s, rate=4")
     parser.add_argument("--demo",       action="store_true",
@@ -269,15 +342,22 @@ Examples:
         dur = 30.0 if args.quick else args.duration
         run_live_demo(args.pattern, args.rate, dur)
 
+    elif args.ablation:
+        run_ablation(args.pattern, args.rate, args.duration, args.seed)
+
+    elif args.seeds:
+        schedulers = args.compare if args.compare and "all" not in args.compare else ["fcfs","rr","sjf","priority","edf","mosaic"]
+        run_multi_seed(args.pattern, args.rate, args.duration, schedulers, args.seeds)
+
     elif args.compare:
         run_compare_all(args.pattern, args.rate, args.duration,
-                        args.quick, args.no_charts)
+                        args.quick, args.no_charts, args.seed)
 
     else:
         # Default: run everything
         log_info("No option specified -- running full benchmark (use --compare all)")
         run_compare_all(args.pattern, args.rate, args.duration,
-                        args.quick, args.no_charts)
+                        args.quick, args.no_charts, args.seed)
 
     log_step("Done.")
 

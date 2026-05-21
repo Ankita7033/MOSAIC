@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  coordinator:
+    build: .
+    command: python mosaic/benchmarking/cluster_benchmark.py --duration 60
+    ports:
+      - "8000:8000"  # Expose the Cluster Dashboard
+    environment:
+      - CLUSTER_MODE=true
+    volumes:
+      - ./mosaic:/app/mosaic
+
+  node_1:
+    build: .
+    command: python mosaic/run_experiment.py --demo
+    environment:
+      - NODE_ID=node_1
+      - PMU_MODE=simulated
+    volumes:
+      - ./mosaic:/app/mosaic
+
+  node_2:
+    build: .
+    command: python mosaic/run_experiment.py --demo
+    environment:
+      - NODE_ID=node_2
+      - PMU_MODE=simulated
+    volumes:
+      - ./mosaic:/app/mosaic
+
+  node_3:
+    build: .
+    command: python mosaic/run_experiment.py --demo
+    environment:
+      - NODE_ID=node_3
+      - PMU_MODE=simulated
+    volumes:
+      - ./mosaic:/app/mosaic

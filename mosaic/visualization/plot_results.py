@@ -77,9 +77,11 @@ PALETTE = {
     "RoundRobin":    "#ffaa00",
     "SJF":           "#a78bfa",
     "PriorityStatic":"#00d4ff",
+    "PriorityStrict":"#00d4ff",
+    "EDF":           "#ff66cc",
 }
 
-SCHEDULER_ORDER = ["FCFS", "RoundRobin", "SJF", "PriorityStatic", "MOSAIC"]
+SCHEDULER_ORDER = ["FCFS", "RoundRobin", "SJF", "EDF", "PriorityStatic", "PriorityStrict", "MOSAIC"]
 
 def get_color(name: str) -> str:
     return PALETTE.get(name, "#888888")
@@ -330,43 +332,39 @@ def generate_all_charts(results: list[dict], out_dir: Path) -> list[Path]:
     return generated
 
 
-def plot_gantt(metrics_path: Path, out_dir: Path, max_tasks: int = 40) -> Optional[Path]:
+def plot_gantt(events: list[dict], out_dir: Path, max_tasks: int = 40) -> Optional[Path]:
     """
-    Gantt-style timeline from metrics.jsonl.
+    Gantt-style timeline from timeline events.
     Each row = one task, coloured by workload class.
+    Shows critical window, grouped by class.
     """
-    if not HAS_MPL or not metrics_path.exists():
+    if not HAS_MPL or not events:
         return None
-
-    events: list[dict] = []
-    with open(metrics_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                try:
-                    events.append(json.loads(line))
-                except json.JSONDecodeError:
-                    pass
 
     # Build task intervals
     admit_ts:    dict[str, float] = {}
     complete_ts: dict[str, float] = {}
+    reject_ts:   dict[str, float] = {}
+    expire_ts:   dict[str, float] = {}
     task_class:  dict[str, str]   = {}
-    task_tier:   dict[str, int]   = {}
 
     for e in events:
         tid = e.get("task_id")
         if not tid: continue
+        task_class[tid] = e.get("class","unknown")
+        
         if e["event"] == "ADMIT":
-            admit_ts[tid]   = e["ts"]
-            task_class[tid] = e.get("class","unknown")
-            task_tier[tid]  = e.get("tier", 3)
+            admit_ts[tid] = e["ts"]
         elif e["event"] == "COMPLETE" and tid in admit_ts:
             complete_ts[tid] = e["ts"]
+        elif e["event"] == "REJECT":
+            reject_ts[tid] = e["ts"]
+        elif e["event"] == "EXPIRE":
+            expire_ts[tid] = e["ts"]
 
-    tasks = [(tid, admit_ts[tid], complete_ts[tid], task_class.get(tid,"unknown"))
-             for tid in complete_ts if tid in admit_ts]
-    tasks.sort(key=lambda x: x[1])
+    tasks = [(tid, admit_ts[tid], complete_ts.get(tid, admit_ts[tid]), task_class[tid])
+             for tid in admit_ts]
+    tasks.sort(key=lambda x: (x[3], x[1])) # Group by class, then start time
     tasks = tasks[:max_tasks]
 
     if not tasks:
@@ -387,11 +385,17 @@ def plot_gantt(metrics_path: Path, out_dir: Path, max_tasks: int = 40) -> Option
     fig.patch.set_facecolor("#0d1117")
 
     for i, (tid, start, end, cls) in enumerate(tasks):
-        s = start - min_ts
-        d = max(0.01, end - start)
+        s = start / 1000.0
+        d = max(0.01, (end - start) / 1000.0)
         color = cls_colors.get(cls, "#888888")
         ax.barh(i, d, left=s, height=0.7, color=color, alpha=0.85, edgecolor="none")
         ax.text(s + d + 0.05, i, tid, va="center", fontsize=6, color="#a0a0a0")
+
+        # Rejection & Expiration Markers
+        if tid in reject_ts:
+            ax.plot(reject_ts[tid]/1000.0, i, "rx", markersize=8, markeredgewidth=2)
+        if tid in expire_ts:
+            ax.plot(expire_ts[tid]/1000.0, i, "yo", markersize=6)
 
     ax.set_xlabel("Time (seconds)")
     ax.set_yticks(range(len(tasks)))
@@ -406,6 +410,45 @@ def plot_gantt(metrics_path: Path, out_dir: Path, max_tasks: int = 40) -> Option
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "gantt_timeline.png"
+    fig.savefig(path, bbox_inches="tight", dpi=120, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    print(f"[viz] Saved: {path}")
+    return path
+
+def plot_timeline_metrics(events: list[dict], out_dir: Path) -> Optional[Path]:
+    """Plots active tasks and queue depths over time."""
+    if not HAS_MPL or not events:
+        return None
+
+    events.sort(key=lambda e: e["ts"])
+    times = []
+    active = []
+    
+    current_active = 0
+    for e in events:
+        t_sec = e["ts"] / 1000.0
+        times.append(t_sec)
+        
+        if e["event"] == "ADMIT": current_active += 1
+        elif e["event"] in ("COMPLETE", "EXPIRE"): current_active = max(0, current_active - 1)
+        
+        active.append(current_active)
+
+    if not times: return None
+
+    setup_style()
+    fig, ax = plt.subplots(figsize=(10, 4))
+    fig.patch.set_facecolor("#0d1117")
+
+    ax.plot(times, active, color="#00e5a0", linewidth=1.5, label="Active Tasks")
+    ax.fill_between(times, 0, active, color="#00e5a0", alpha=0.2)
+    
+    ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel("Running Tasks")
+    ax.set_title("MOSAIC Active Task Timeline")
+    ax.legend(loc="upper right", framealpha=0.3)
+
+    path = out_dir / "time_series_metrics.png"
     fig.savefig(path, bbox_inches="tight", dpi=120, facecolor=fig.get_facecolor())
     plt.close(fig)
     print(f"[viz] Saved: {path}")
@@ -443,14 +486,15 @@ def main():
     print(f"\n[viz] Generating charts from {results_path}")
     generated = generate_all_charts(results, out_dir)
 
-    if args.gantt:
-        metrics_path = _ROOT / "data" / "metrics.jsonl"
-        plot_gantt(metrics_path, out_dir)
+    if args.gantt and "results" in data:
+        # Extract MOSAIC timeline
+        mosaic_res = next((r for r in results if r.get("scheduler") == "MOSAIC"), None)
+        if mosaic_res and "timeline" in mosaic_res:
+            plot_gantt(mosaic_res["timeline"], out_dir)
+            plot_timeline_metrics(mosaic_res["timeline"], out_dir)
 
     if generated:
         print(f"\n[viz] {len(generated)} charts saved to {out_dir}/")
-    else:
-        print(f"\n[viz] ASCII charts shown above (install matplotlib for PNG output)")
 
 
 if __name__ == "__main__":
